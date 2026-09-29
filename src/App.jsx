@@ -1,307 +1,170 @@
-import { useState, useEffect } from 'react';
-import Header from './components/Header.jsx';
-import StatsCard from './components/StatsCard.jsx';
-import AssignmentCard from './components/AssignmentCard.jsx';
-import ConfirmModal from './components/ConfirmModal.jsx';
-import AdminForm from './components/AdminForm.jsx';
-import StudentTable from './components/StudentTable.jsx';
-import { initialAssignments } from './data/assignments.js';
-import { FileText, CheckCircle2, Clock, RotateCcw } from 'lucide-react';
+import { useState, useEffect } from "react";
 
-const STORAGE_KEY = 'joineazy_assignments_v1';
+import LoginPage from "./pages/loginpage.jsx";
+import RegisterPage from "./pages/registerpage";
+import StudentDashboard from "./pages/studentdashboard";
+import ProfessorDashboard from "./pages/professordashboard";
+import StudentAssignments from "./pages/studentassignments";
+import ProfessorAssignments from "./pages/professorassignments";
+
+import { users as demoUsers } from "./data/users";
+import { initialAssignments } from "./data/assignments";
+
+const USERS_KEY = "joineazy_users";
+const ASSIGNMENTS_KEY = "joineazy_assignments";
 
 function App() {
-  
-  const [role, setRole] = useState('student');
-
- 
-  const [assignments, setAssignments] = useState(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      }
-    } catch (err) {
-      console.error('Error reading localStorage:', err);
-    }
-    return initialAssignments;
+  // Load users from localStorage
+  const [users, setUsers] = useState(() => {
+    const saved = localStorage.getItem(USERS_KEY);
+    return saved ? JSON.parse(saved) : demoUsers;
   });
 
-  
-  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
-  const [selectedAssignment, setSelectedAssignment] = useState(null);
+  // Load assignments from localStorage
+  const [assignments, setAssignments] = useState(() => {
+    const saved = localStorage.getItem(ASSIGNMENTS_KEY);
+    return saved ? JSON.parse(saved) : initialAssignments;
+  });
 
-  
+  const [currentUser, setCurrentUser] = useState(null);
+  const [currentCourse, setCurrentCourse] = useState(null);
+  const [page, setPage] = useState("login");
+
+  // Save users
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(assignments));
-    } catch (err) {
-      console.error('Error writing to localStorage:', err);
-    }
+    localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  }, [users]);
+
+  // Save assignments
+  useEffect(() => {
+    localStorage.setItem(
+      ASSIGNMENTS_KEY,
+      JSON.stringify(assignments)
+    );
   }, [assignments]);
 
- 
-  const totalCount = assignments.length;
-  const completedCount = assignments.filter((a) => a.status === 'Submitted').length;
-  const pendingCount = assignments.filter((a) => a.status === 'Pending').length;
+  // Register
+  const handleRegister = (newUser) => {
+    const user = {
+      ...newUser,
+      id: Date.now().toString(),
+      semester: "Semester 5",
+      groupId: null,
+      isLeader: false,
+    };
 
-  
-  const handleInitiateSubmit = (assignment) => {
-    setSelectedAssignment(assignment);
-    setConfirmModalOpen(true);
+    setUsers((prev) => [...prev, user]);
+    setCurrentUser(user);
   };
 
-  const handleConfirmSubmit = (assignmentId) => {
+  // Student submission
+  const handleStudentSubmit = (assignmentId) => {
     setAssignments((prev) =>
-      prev.map((item) => {
-        if (item.id === assignmentId) {
-          return {
-            ...item,
-            status: 'Submitted',
-            progress: 100,
-            submittedAt: new Date().toISOString()
-          };
-        }
-        return item;
-      })
+      prev.map((assignment) =>
+        assignment.id === assignmentId
+          ? {
+              ...assignment,
+              status: "Submitted",
+              progress: 100,
+              submittedAt: new Date().toISOString(),
+            }
+          : assignment
+      )
     );
-    setConfirmModalOpen(false);
-    setSelectedAssignment(null);
   };
 
-  const handleCloseModal = () => {
-    setConfirmModalOpen(false);
-    setSelectedAssignment(null);
-  };
-
- 
-  const handleAddAssignment = (newAssignmentData) => {
+  // Professor creates assignment
+  const handleAddAssignment = (assignmentData) => {
     const newAssignment = {
       id: `assign-${Date.now()}`,
-      title: newAssignmentData.title,
-      subject: newAssignmentData.subject,
-      dueDate: newAssignmentData.dueDate,
-      driveLink: newAssignmentData.driveLink,
-      status: 'Pending',
+      courseId: currentCourse.id,
+      title: assignmentData.title,
+      description: assignmentData.description,
+      subject: currentCourse.name,
+      dueDate: assignmentData.dueDate,
+      driveLink: assignmentData.driveLink,
+      submissionType: assignmentData.submissionType,
+      status: "Pending",
       progress: 0,
-      submittedAt: null
+      submittedAt: null,
     };
+
     setAssignments((prev) => [newAssignment, ...prev]);
   };
 
-  const handleToggleStatus = (assignmentId) => {
-    setAssignments((prev) =>
-      prev.map((item) => {
-        if (item.id === assignmentId) {
-          const isSubmitted = item.status === 'Submitted';
-          return {
-            ...item,
-            status: isSubmitted ? 'Pending' : 'Submitted',
-            progress: isSubmitted ? 0 : 100,
-            submittedAt: isSubmitted ? null : new Date().toISOString()
-          };
-        }
-        return item;
-      })
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setCurrentCourse(null);
+    setPage("login");
+  };
+
+  // ---------------- LOGIN / REGISTER ----------------
+
+  if (!currentUser) {
+    if (page === "register") {
+      return (
+        <RegisterPage
+          onRegister={handleRegister}
+          goLogin={() => setPage("login")}
+        />
+      );
+    }
+
+    return (
+      <LoginPage
+        users={users}
+        onLogin={setCurrentUser}
+        goRegister={() => setPage("register")}
+      />
     );
-  };
+  }
 
-  const handleDeleteAssignment = (assignmentId) => {
-    if (window.confirm('Are you sure you want to delete this assignment?')) {
-      setAssignments((prev) => prev.filter((item) => item.id !== assignmentId));
-    }
-  };
+  // ---------------- STUDENT FLOW ----------------
 
-  const handleResetSampleData = () => {
-    if (window.confirm('Reset all assignments back to default sample data?')) {
-      setAssignments(initialAssignments);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(initialAssignments));
+  if (currentUser.role === "student") {
+    if (!currentCourse) {
+      return (
+        <StudentDashboard
+          user={currentUser}
+          assignments={assignments}
+          onLogout={handleLogout}
+          onOpenCourse={setCurrentCourse}
+        />
+      );
     }
-  };
+
+    return (
+      <StudentAssignments
+        user={currentUser}
+        course={currentCourse}
+        assignments={assignments}
+        onBack={() => setCurrentCourse(null)}
+        onSubmit={handleStudentSubmit}
+      />
+    );
+  }
+
+  // ---------------- PROFESSOR FLOW ----------------
+
+  if (!currentCourse) {
+    return (
+      <ProfessorDashboard
+        user={currentUser}
+        onLogout={handleLogout}
+        onOpenCourse={setCurrentCourse}
+      />
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[#F5F7FA] text-slate-800 py-8 sm:py-10 md:py-14 px-4 sm:px-6 lg:px-8">
-      
-      <div className="max-w-7xl mx-auto space-y-8 md:space-y-10">
-
-       
-        <Header />
-
-        
-        <div className="flex flex-col items-center justify-center space-y-2">
-          <div className="inline-flex p-1.5 bg-white border border-gray-200/90 rounded-full shadow-xs">
-            
-            <button
-              type="button"
-              onClick={() => setRole('student')}
-              className={`px-7 py-2.5 rounded-full text-sm font-semibold transition-all duration-200 cursor-pointer ${
-                role === 'student'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
-            >
-              Student
-            </button>
-
-           
-            <button
-              type="button"
-              onClick={() => setRole('admin')}
-              className={`px-7 py-2.5 rounded-full text-sm font-semibold transition-all duration-200 cursor-pointer ${
-                role === 'admin'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
-            >
-              Admin
-            </button>
-          </div>
-          <p className="text-xs text-gray-600 font-medium">
-            Currently viewing as <span className="text-blue-700 font-semibold capitalize">{role}</span>
-          </p>
-        </div>
-
-       
-        <section aria-label="Dashboard Statistics">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-6">
-            <StatsCard
-              label="Assignments"
-              value={totalCount}
-              tag="Total coursework"
-              icon={<FileText className="w-5 h-5" />}
-            />
-            <StatsCard
-              label="Completed"
-              value={completedCount}
-              tag="Submitted"
-              icon={<CheckCircle2 className="w-5 h-5 text-emerald-600" />}
-            />
-            <StatsCard
-              label="Pending"
-              value={pendingCount}
-              tag="Action required"
-              icon={<Clock className="w-5 h-5 text-amber-600" />}
-            />
-          </div>
-        </section>
-
-        
-        {role === 'student' ? (
-         
-          <section className="space-y-6 animate-in fade-in duration-200" aria-label="Student Coursework">
-            
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-              <div>
-                <h2 className="text-2xl sm:text-[28px] font-bold text-gray-900 tracking-tight">
-                  Available Assignments
-                </h2>
-                <p className="text-sm sm:text-base text-gray-500 mt-1">
-                  Access drive resources, finish your submissions, and mark tasks as complete.
-                </p>
-              </div>
-
-              {/* Reset Data Helper */}
-              <button
-                type="button"
-                onClick={handleResetSampleData}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 bg-white border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors self-start sm:self-auto cursor-pointer"
-                title="Reset to default assignments"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Reset Sample Data
-              </button>
-            </div>
-
-            {/* Assignments Grid */}
-            {assignments.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {assignments.map((assignment) => (
-                  <AssignmentCard
-                    key={assignment.id}
-                    assignment={assignment}
-                    onMarkSubmitted={handleInitiateSubmit}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="bg-white rounded-2xl md:rounded-3xl border border-gray-100 shadow-sm p-12 text-center">
-                <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 mx-auto mb-4">
-                  <FileText className="w-7 h-7" />
-                </div>
-                <h3 className="text-lg font-bold text-gray-900">No Assignments Available</h3>
-                <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">
-                  You have no pending assignments right now. Switch to the Admin view to create new coursework.
-                </p>
-                <div className="mt-5">
-                  <button
-                    type="button"
-                    onClick={() => setRole('admin')}
-                    className="px-5 py-2.5 rounded-xl font-semibold text-sm bg-blue-600 hover:bg-blue-700 text-white transition-colors"
-                  >
-                    Go to Admin Dashboard
-                  </button>
-                </div>
-              </div>
-            )}
-          </section>
-        ) : (
-          
-          <section className="space-y-8 animate-in fade-in duration-200" aria-label="Admin Management">
-            
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-              <div>
-                <h2 className="text-2xl sm:text-[28px] font-bold text-gray-900 tracking-tight">
-                  Admin Dashboard
-                </h2>
-                <p className="text-sm sm:text-base text-gray-500 mt-1">
-                  Create new coursework and monitor student submission progress across classes.
-                </p>
-              </div>
-
-             
-              <button
-                type="button"
-                onClick={handleResetSampleData}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 bg-white border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors self-start sm:self-auto cursor-pointer"
-                title="Reset to default assignments"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Reset Sample Data
-              </button>
-            </div>
-
-            
-            <AdminForm onAddAssignment={handleAddAssignment} />
-
-          
-            <StudentTable
-              assignments={assignments}
-              onToggleStatus={handleToggleStatus}
-              onDeleteAssignment={handleDeleteAssignment}
-            />
-          </section>
-        )}
-
-        
-        <footer className="pt-8 pb-4 text-center border-t border-gray-200/80">
-          <p className="text-xs text-gray-400">
-            Joineazy Frontend Internship Assignment &middot; Assignment & Review Dashboard
-          </p>
-        </footer>
-
-      </div>
-
-      
-      <ConfirmModal
-        isOpen={confirmModalOpen}
-        assignment={selectedAssignment}
-        onClose={handleCloseModal}
-        onConfirm={handleConfirmSubmit}
-      />
-    </div>
+    <ProfessorAssignments
+      user={currentUser}
+      course={currentCourse}
+      assignments={assignments}
+      onBack={() => setCurrentCourse(null)}
+      onAddAssignment={handleAddAssignment}
+    />
   );
 }
+
 export default App;
